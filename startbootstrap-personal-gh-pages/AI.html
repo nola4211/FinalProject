@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tron Cycles</title>
+    <link rel="stylesheet" href="ai.css" />
+    <style>
+        body {
+            margin: 0;
+            background-color: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        #gameCanvas {
+            border: 4px solid blue;
+            background-color: black;
+            display: block;
+        }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 255, 0.85);
+            color: white;
+            font-size: 2em;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            z-index: 2;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameOver" class="hidden">
+        Game Over<br>
+        <button id="restartButton">Restart</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const gridSize = 10;
+
+        function resizeCanvas() {
+            canvas.width = Math.floor(window.innerWidth / gridSize) * gridSize;
+            canvas.height = Math.floor(window.innerHeight / gridSize) * gridSize;
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            initGame();
+        });
+
+        resizeCanvas();
+
+        let width = canvas.width / gridSize;
+        let height = canvas.height / gridSize;
+
+        const motorcycleIcon = new Image();
+        motorcycleIcon.src = 'https://images.rawpixel.com/image_png_social_square/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvam9iNjY4LTEwMC1wXzEtbDE0YW5udHQucG5n.png';
+
+        let player, enemy, trails, gameOver;
+
+        function initGame() {
+            width = canvas.width / gridSize;
+            height = canvas.height / gridSize;
+
+            player = {
+                x: 5,
+                y: 5,
+                dx: 1,
+                dy: 0,
+                color: 'cyan'
+            };
+
+            enemy = {
+                x: width - 10,
+                y: height - 10,
+                dx: -1,
+                dy: 0,
+                color: 'red'
+            };
+
+            trails = {};
+            gameOver = false;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('gameOver').classList.add('hidden');
+
+            trails[`${player.x},${player.y}`] = true;
+            trails[`${enemy.x},${enemy.y}`] = true;
+            drawTrail(player.x, player.y, player.color);
+            drawTrail(enemy.x, enemy.y, enemy.color);
+            drawBike(player.x, player.y);
+            drawBike(enemy.x, enemy.y);
+        }
+
+        function keyDownHandler(e) {
+            if (gameOver) return;
+            switch (e.key) {
+                case 'ArrowUp':
+                    if (player.dy === 0) {
+                        player.dx = 0;
+                        player.dy = -1;
+                    }
+                    break;
+                case 'ArrowDown':
+                    if (player.dy === 0) {
+                        player.dx = 0;
+                        player.dy = 1;
+                    }
+                    break;
+                case 'ArrowLeft':
+                    if (player.dx === 0) {
+                        player.dx = -1;
+                        player.dy = 0;
+                    }
+                    break;
+                case 'ArrowRight':
+                    if (player.dx === 0) {
+                        player.dx = 1;
+                        player.dy = 0;
+                    }
+                    break;
+            }
+        }
+
+        function drawTrail(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+        }
+
+        function drawBike(x, y) {
+            ctx.drawImage(motorcycleIcon, x * gridSize, y * gridSize, gridSize, gridSize);
+        }
+
+        function updatePlayer(p) {
+            const prevX = p.x;
+            const prevY = p.y;
+
+            p.x += p.dx;
+            p.y += p.dy;
+
+            if (p.x < 0 || p.x >= width || p.y < 0 || p.y >= height || trails[`${p.x},${p.y}`]) {
+                return true;
+            }
+
+            trails[`${p.x},${p.y}`] = true;
+            drawTrail(prevX, prevY, p.color);
+            drawBike(p.x, p.y);
+            return false;
+        }
+
+        function updateEnemyAI() {
+            const dirs = [{
+                dx: 1,
+                dy: 0
+            }, {
+                dx: -1,
+                dy: 0
+            }, {
+                dx: 0,
+                dy: 1
+            }, {
+                dx: 0,
+                dy: -1
+            }];
+
+            dirs.sort((a, b) => {
+                const aDist = Math.abs((enemy.x + a.dx) - player.x) + Math.abs((enemy.y + a.dy) - player.y);
+                const bDist = Math.abs((enemy.x + b.dx) - player.x) + Math.abs((enemy.y + b.dy) - player.y);
+                return aDist - bDist;
+            });
+
+            for (const dir of dirs) {
+                const nx = enemy.x + dir.dx;
+                const ny = enemy.y + dir.dy;
+                if (
+                    nx >= 0 && nx < width && ny >= 0 && ny < height &&
+                    !trails[`${nx},${ny}`]
+                ) {
+                    enemy.dx = dir.dx;
+                    enemy.dy = dir.dy;
+                    return;
+                }
+            }
+
+            enemy.dx = 0;
+            enemy.dy = 0;
+        }
+
+        function loop() {
+            if (gameOver) return;
+
+            updateEnemyAI();
+
+            const playerCrashed = updatePlayer(player);
+            const enemyCrashed = updatePlayer(enemy);
+
+            if (playerCrashed || enemyCrashed) {
+                gameOver = true;
+                document.getElementById('gameOver').classList.remove('hidden');
+                return;
+            }
+
+            setTimeout(loop, 100);
+        }
+
+        document.addEventListener('keydown', keyDownHandler);
+        document.getElementById('restartButton').addEventListener('click', () => {
+            initGame();
+            loop();
+        });
+
+        motorcycleIcon.onload = () => {
+            initGame();
+            loop();
+        };
+    </script>
+</body>
+
+</html>
