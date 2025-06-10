@@ -660,7 +660,7 @@ progress {
 }
 
 .profile-img {
-    border-radius: 25%;
+    border-radius: 15%;
     object-fit: cover;
     width: 600px;
     /* Adjust as needed */
