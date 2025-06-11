@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tron Cycles</title>
     <style>
         body {
@@ -13,46 +13,31 @@
             text-align: center;
             margin: 0;
             padding: 0;
-        }
-        
-        h1 {
-            margin-top: 10px;
-            font-size: 24px;
-        }
-        
-        canvas {
-            border: 2px solid white;
-            display: block;
-            margin: 20px auto;
-            background-color: #000;
-        }
-        
-        #gameOver {
-            font-size: 32px;
-            color: red;
-            font-weight: bold;
-            margin-top: 20px;
-        }
-        
-        .hidden {
-            display: none;
-        }
-    </style>
-    <style>
-        body {
-            margin: 0;
-            background-color: black;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             overflow: hidden;
+            position: relative;
         }
         
-        #gameCanvas {
+        canvas {
             border: 4px solid blue;
             background-color: black;
             display: block;
+        }
+        
+        #scoreBoard {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 1.5em;
+            background: rgba(0, 0, 255, 0.6);
+            padding: 8px 20px;
+            border-radius: 10px;
+            z-index: 1;
         }
         
         #gameOver {
@@ -69,20 +54,7 @@
             z-index: 2;
         }
         
-        #scoreBoard {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: white;
-            font-size: 1.5em;
-            background: rgba(0, 0, 255, 0.6);
-            padding: 8px 20px;
-            border-radius: 10px;
-            z-index: 1;
-        }
-        
-        .hidden {
+        #gameOver.hidden {
             display: none;
         }
     </style>
@@ -90,52 +62,60 @@
 
 <body>
     <canvas id="gameCanvas"></canvas>
-    <div id="scoreBoard">Score: 0</div>
+    <div id="scoreBoard">Score: 0 | Level: 1</div>
     <div id="gameOver" class="hidden">
-        Game Over<br>
+        Game Over<br />
         <button id="restartButton">Restart</button>
     </div>
 
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const scoreBoard = document.getElementById('scoreBoard');
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreBoard = document.getElementById("scoreBoard");
+        const gameOverDiv = document.getElementById("gameOver");
 
         const gridSize = 10;
         let score = 0;
+        let level = 1;
+        let paused = false;
+        let gameOver = false;
+
+        const playerSpeed = 50;
+        const baseEnemySpeed = 85;
+        let enemySpeed = baseEnemySpeed;
+
+        let width, height;
+
+        // Trail segments: array of {x, y, time, color}
+        let trails = [];
+
+        let player, enemy;
 
         function resizeCanvas() {
             canvas.width = Math.floor(window.innerWidth / gridSize) * gridSize;
             canvas.height = Math.floor(window.innerHeight / gridSize) * gridSize;
-        }
-
-        window.addEventListener('resize', () => {
-            resizeCanvas();
-            initGame();
-        });
-
-        resizeCanvas();
-
-        let width = canvas.width / gridSize;
-        let height = canvas.height / gridSize;
-
-        const motorcycleIcon = new Image();
-        motorcycleIcon.src = 'https://images.rawpixel.com/image_png_social_square/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvam9iNjY4LTEwMC1wXzEtbDE0YW5udHQucG5n.png';
-
-        let player, enemy, trails, gameOver;
-        let playerSpeed = 50; // 2x faster
-        let enemySpeed = 85; // 1.8x faster (50 / 1.8)
-
-        function initGame() {
             width = canvas.width / gridSize;
             height = canvas.height / gridSize;
+        }
+        resizeCanvas();
+        window.addEventListener("resize", () => {
+            resizeCanvas();
+            initGame(false);
+        });
+
+        function initGame(resetAll = true) {
+            if (resetAll) {
+                score = 0;
+                level = 1;
+                enemySpeed = baseEnemySpeed;
+            }
 
             player = {
                 x: 5,
                 y: 5,
                 dx: 1,
                 dy: 0,
-                color: 'cyan'
+                color: "cyan",
             };
 
             enemy = {
@@ -143,50 +123,68 @@
                 y: height - 10,
                 dx: -1,
                 dy: 0,
-                color: 'red'
+                color: "red",
             };
 
-            trails = {};
+            trails = [];
             gameOver = false;
-            score = 0;
-            updateScore();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            document.getElementById('gameOver').classList.add('hidden');
+            paused = false;
 
-            trails[`${player.x},${player.y}`] = true;
-            trails[`${enemy.x},${enemy.y}`] = true;
-            drawTrail(player.x, player.y, player.color);
-            drawTrail(enemy.x, enemy.y, enemy.color);
-            drawBike(player.x, player.y);
-            drawBike(enemy.x, enemy.y);
+            // Add initial trail positions with timestamps
+            const now = performance.now();
+            trails.push({
+                x: player.x,
+                y: player.y,
+                time: now,
+                color: player.color
+            });
+            trails.push({
+                x: enemy.x,
+                y: enemy.y,
+                time: now,
+                color: enemy.color
+            });
+
+            updateScore();
+            gameOverDiv.classList.add("hidden");
         }
 
         function updateScore() {
-            scoreBoard.textContent = `Score: ${score}`;
+            scoreBoard.textContent = `Score: ${score} | Level: ${level}`;
         }
 
         function keyDownHandler(e) {
-            if (gameOver) return;
+            if (e.key === "p" || e.key === "P") {
+                paused = !paused;
+                if (!paused && !gameOver) {
+                    playerLoop();
+                    enemyLoop();
+                    renderLoop();
+                }
+                return;
+            }
+            if (gameOver || paused) return;
+
             switch (e.key) {
-                case 'ArrowUp':
+                case "ArrowUp":
                     if (player.dy === 0) {
                         player.dx = 0;
                         player.dy = -1;
                     }
                     break;
-                case 'ArrowDown':
+                case "ArrowDown":
                     if (player.dy === 0) {
                         player.dx = 0;
                         player.dy = 1;
                     }
                     break;
-                case 'ArrowLeft':
+                case "ArrowLeft":
                     if (player.dx === 0) {
                         player.dx = -1;
                         player.dy = 0;
                     }
                     break;
-                case 'ArrowRight':
+                case "ArrowRight":
                     if (player.dx === 0) {
                         player.dx = 1;
                         player.dy = 0;
@@ -195,33 +193,75 @@
             }
         }
 
-        function drawTrail(x, y, color) {
+        // Draw the whole scene (clear, then draw all trails with fading, then bikes)
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const now = performance.now();
+
+            // Draw trails with fading
+            trails = trails.filter((segment) => {
+                const age = now - segment.time;
+                if (age > 5000) return false; // remove if older than 3 seconds
+
+                const alpha = 1 - age / 5000;
+                ctx.fillStyle = segment.color;
+                ctx.globalAlpha = alpha;
+                ctx.fillRect(
+                    segment.x * gridSize,
+                    segment.y * gridSize,
+                    gridSize,
+                    gridSize
+                );
+                ctx.globalAlpha = 1;
+                return true;
+            });
+
+            // Draw bikes on top (solid color)
+            drawBike(player.x, player.y, player.color);
+            drawBike(enemy.x, enemy.y, enemy.color);
+        }
+
+        function drawBike(x, y, color) {
             ctx.fillStyle = color;
             ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
         }
 
-        function drawBike(x, y) {
-            ctx.drawImage(motorcycleIcon, x * gridSize, y * gridSize, gridSize, gridSize);
-        }
-
         function updatePlayer(p) {
-            const prevX = p.x;
-            const prevY = p.y;
+            const nextX = p.x + p.dx;
+            const nextY = p.y + p.dy;
 
-            p.x += p.dx;
-            p.y += p.dy;
+            // Check collision with trails except current bike position
+            const trailCollision = trails.some(
+                (seg) => seg.x === nextX && seg.y === nextY
+            );
 
-            if (p.x < 0 || p.x >= width || p.y < 0 || p.y >= height || trails[`${p.x},${p.y}`]) {
-                return true;
+            // Check wall collision
+            if (
+                nextX < 0 ||
+                nextX >= width ||
+                nextY < 0 ||
+                nextY >= height ||
+                trailCollision
+            ) {
+                return true; // crashed
             }
 
-            trails[`${p.x},${p.y}`] = true;
-            drawTrail(prevX, prevY, p.color);
-            drawBike(p.x, p.y);
+            p.x = nextX;
+            p.y = nextY;
+
+            trails.push({
+                x: p.x,
+                y: p.y,
+                time: performance.now(),
+                color: p.color
+            });
+
             return false;
         }
 
         function updateEnemyAI() {
+            // Try directions closest to player
             const dirs = [{
                 dx: 1,
                 dy: 0
@@ -234,21 +274,20 @@
             }, {
                 dx: 0,
                 dy: -1
-            }];
+            }, ];
 
             dirs.sort((a, b) => {
-                const aDist = Math.abs((enemy.x + a.dx) - player.x) + Math.abs((enemy.y + a.dy) - player.y);
-                const bDist = Math.abs((enemy.x + b.dx) - player.x) + Math.abs((enemy.y + b.dy) - player.y);
+                const aDist = Math.abs(enemy.x + a.dx - player.x) + Math.abs(enemy.y + a.dy - player.y);
+                const bDist = Math.abs(enemy.x + b.dx - player.x) + Math.abs(enemy.y + b.dy - player.y);
                 return aDist - bDist;
             });
 
             for (const dir of dirs) {
                 const nx = enemy.x + dir.dx;
                 const ny = enemy.y + dir.dy;
-                if (
-                    nx >= 0 && nx < width && ny >= 0 && ny < height &&
-                    !trails[`${nx},${ny}`]
-                ) {
+                const collision = trails.some(seg => seg.x === nx && seg.y === ny);
+
+                if (nx >= 0 && nx < width && ny >= 0 && ny < height && !collision) {
                     enemy.dx = dir.dx;
                     enemy.dy = dir.dy;
                     return;
@@ -259,77 +298,99 @@
             enemy.dy = 0;
         }
 
-        function playerLoop() {
-            if (gameOver) return;
+        function showGameOver(won) {
+            if (won) {
+                gameOverDiv.innerHTML = `
+        WIN user<br>
+        <button id="nextLevelButton">Next Level</button>
+      `;
+                document.getElementById("nextLevelButton").addEventListener("click", () => {
+                    level++;
+                    enemySpeed = Math.max(20, enemySpeed - 10); // speed up enemy
 
-            const playerNext = {
-                x: player.x + player.dx,
-                y: player.y + player.dy
-            };
-            const playerHitsEnemyTrail = trails[`${playerNext.x},${playerNext.y}`] && !(playerNext.x === enemy.x && playerNext.y === enemy.y);
-            if (playerHitsEnemyTrail) score--;
-            updateScore();
-            const playerCrashed = updatePlayer(player);
-            if (playerCrashed) {
+                    initGame(false);
+                    updateScore();
+
+                    playerLoop();
+                    enemyLoop();
+                    renderLoop();
+                });
+            } else {
+                gameOverDiv.innerHTML = `
+        You lose<br>
+        <button id="restartButton">Restart</button>
+      `;
+                document.getElementById("restartButton").addEventListener("click", () => {
+                    initGame(true);
+                    updateScore();
+
+                    playerLoop();
+                    enemyLoop();
+                    renderLoop();
+                });
+            }
+            gameOverDiv.classList.remove("hidden");
+        }
+
+        function playerLoop() {
+            if (gameOver || paused) return;
+
+            const crashed = updatePlayer(player);
+            if (crashed) {
                 gameOver = true;
-                document.getElementById('gameOver').classList.remove('hidden');
+                showGameOver(false);
                 return;
             }
             setTimeout(playerLoop, playerSpeed);
         }
 
         function enemyLoop() {
-            if (gameOver) return;
+            if (gameOver || paused) return;
 
             updateEnemyAI();
 
-            const enemyNext = {
-                x: enemy.x + enemy.dx,
-                y: enemy.y + enemy.dy
-            };
-            const enemyHitsPlayerTrail = trails[`${enemyNext.x},${enemyNext.y}`] && !(enemyNext.x === player.x && enemyNext.y === player.y);
-            if (enemyHitsPlayerTrail) score++;
-            updateScore();
+            const nextX = enemy.x + enemy.dx;
+            const nextY = enemy.y + enemy.dy;
+            const collision = trails.some(seg => seg.x === nextX && seg.y === nextY);
 
-            const prevEnemyX = enemy.x;
-            const prevEnemyY = enemy.y;
-            enemy.x += enemy.dx;
-            enemy.y += enemy.dy;
-
-            let enemyCrashed = false;
             if (
-                enemy.x < 0 || enemy.x >= width ||
-                enemy.y < 0 || enemy.y >= height ||
-                trails[`${enemy.x},${enemy.y}`]
+                nextX < 0 ||
+                nextX >= width ||
+                nextY < 0 ||
+                nextY >= height ||
+                collision
             ) {
-                enemyCrashed = true;
-            } else {
-                trails[`${enemy.x},${enemy.y}`] = true;
-                drawTrail(prevEnemyX, prevEnemyY, enemy.color);
-                drawBike(enemy.x, enemy.y);
-            }
-
-            if (enemyCrashed) {
                 gameOver = true;
-                document.getElementById('gameOver').classList.remove('hidden');
+                showGameOver(true);
                 return;
             }
+
+            enemy.x = nextX;
+            enemy.y = nextY;
+            trails.push({
+                x: enemy.x,
+                y: enemy.y,
+                time: performance.now(),
+                color: enemy.color
+            });
 
             setTimeout(enemyLoop, enemySpeed);
         }
 
-        document.addEventListener('keydown', keyDownHandler);
-        document.getElementById('restartButton').addEventListener('click', () => {
-            initGame();
-            playerLoop();
-            enemyLoop();
-        });
+        // Render loop for fading trail effect
+        function renderLoop() {
+            if (!gameOver && !paused) {
+                draw();
+                requestAnimationFrame(renderLoop);
+            }
+        }
 
-        motorcycleIcon.onload = () => {
-            initGame();
-            playerLoop();
-            enemyLoop();
-        };
+        document.addEventListener("keydown", keyDownHandler);
+
+        initGame();
+        playerLoop();
+        enemyLoop();
+        renderLoop();
     </script>
 </body>
 
